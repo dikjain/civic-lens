@@ -5,6 +5,8 @@ pydantic
 pyjwt
 python-multipart
 pillow
+numpy
+ai-edge-litert
 psycopg[binary]
 httpx
 pytest

@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-MODEL = os.path.join(os.path.dirname(__file__), "../../ml/model.keras")
+MODEL = os.path.join(os.path.dirname(__file__), "../model/model.tflite")
 DATA = os.path.join(os.path.dirname(__file__), "../../ml/data/test")
 
 
@@ -11,8 +11,8 @@ DATA = os.path.join(os.path.dirname(__file__), "../../ml/data/test")
 def test_real_model_beats_chance():
     from app import classifier
     classifier.MODEL_PATH = MODEL  # override whatever other tests configured
-    classifier._model, classifier._tried = None, False
-    assert classifier.model_version() == "keras-v1"
+    classifier._backend = None
+    assert classifier.model_version() == "tflite-v1"
     ok = n = 0
     for cls in ["pothole", "garbage", "water_leak", "other"]:
         for f in glob.glob(f"{DATA}/{cls}/*.jpg")[:10]:

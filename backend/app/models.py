@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import ForeignKey, String, Text, Float, Boolean, DateTime
+from sqlalchemy import ForeignKey, String, Text, Float, Boolean, DateTime, LargeBinary
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -83,6 +83,7 @@ class Image(Base):
     complaint_id: Mapped[int] = mapped_column(ForeignKey("complaints.id"))
     filename: Mapped[str] = mapped_column(String(200))
     phash: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)  # JPEG bytes (hosts with ephemeral disks)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=True)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     complaint: Mapped[Complaint] = relationship(back_populates="images")

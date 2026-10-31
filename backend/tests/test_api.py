@@ -36,6 +36,12 @@ def test_end_to_end():
         j = r.json()
         assert j["category"] == "water_leak" and j["priority"] == "high" and j["ref"].startswith("CL-")
 
+        # image is stored in the DB and served back with a valid token
+        tok = cit["Authorization"].split()[1]
+        r = c.get(f"/complaints/{j['id']}/image", params={"token": tok})
+        assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg" and r.content[:2] == b"\xff\xd8"
+        assert c.get(f"/complaints/{j['id']}/image", params={"token": "bad"}).status_code == 401
+
         # bad file rejected
         r = c.post("/complaints", headers=cit, data={"title": "x"}, files={"image": ("a.txt", b"hi", "text/plain")})
         assert r.status_code == 400

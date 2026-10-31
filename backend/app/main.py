@@ -9,7 +9,7 @@ from collections import Counter
 import jwt
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from PIL import Image as PILImage
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
@@ -33,6 +33,7 @@ app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["*
 def startup():
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     Base.metadata.create_all(admin_engine)
+    _migrate()
     from .seed import seed
     with SessionLocal() as db:
         seed(db)
@@ -44,6 +45,25 @@ EAGER = (selectinload(Complaint.images), selectinload(Complaint.history), select
 
 def dept_map(db: Session) -> dict[int, str]:
     return {d.id: d.name for d in db.query(Department).all()}  # one query per request
+
+
+def _migrate():
+    """Tiny schema upgrade (no Alembic): add images.data if the table predates it, then backfill from disk."""
+    from sqlalchemy import inspect, text
+    with admin_engine.begin() as conn:
+        cols = {c["name"] for c in inspect(conn).get_columns("images")}
+        if "data" not in cols:
+            conn.execute(text("ALTER TABLE images ADD COLUMN data " + ("BLOB" if admin_engine.dialect.name == "sqlite" else "BYTEA")))
+    with SessionLocal() as db:
+        rows = db.query(Image).filter(Image.data.is_(None)).all()
+        n = 0
+        for im in rows:
+            path = os.path.join(UPLOAD_DIR, im.filename)
+            if os.path.exists(path):
+                im.data = open(path, "rb").read()
+                n += 1
+        if n:
+            db.commit()
 
 
 def to_out(c: Complaint, depts: dict[int, str] | None = None) -> ComplaintOut:
@@ -118,12 +138,14 @@ async def create_complaint(
         reasons.append(f"Possible duplicate of {dup}")
 
     filename = f"{uuid.uuid4().hex}.jpg"
-    pil.save(os.path.join(UPLOAD_DIR, filename), "JPEG", quality=88)
+    buf = io.BytesIO()
+    pil.save(buf, "JPEG", quality=88)
+    jpeg = buf.getvalue()
 
     c = Complaint(ref="TMP", user_id=user.id, title=title[:200], description=description, lat=lat, lng=lng,
                   category=category, confidence=confidence, needs_review=needs_review,
                   priority=level, priority_reasons=" | ".join(reasons), status="submitted", duplicate_of=dup)
-    c.images.append(Image(filename=filename, phash=ph))
+    c.images.append(Image(filename=filename, phash=ph, data=jpeg))
     c.predictions.append(Prediction(category=category, confidence=confidence, model_version=classifier.model_version()))
     add_history(c, "submitted", "Complaint submitted", user.id)
     db.add(c)
@@ -189,7 +211,13 @@ def get_image(cid: int, token: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "Not found")
     if user.role == "citizen" and c.user_id != user.id:
         raise HTTPException(403, "Not your complaint")
-    return FileResponse(os.path.join(UPLOAD_DIR, c.images[0].filename), media_type="image/jpeg")
+    im = c.images[0]
+    if im.data:
+        return Response(content=im.data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
+    path = os.path.join(UPLOAD_DIR, im.filename)  # legacy rows stored on disk
+    if os.path.exists(path):
+        return FileResponse(path, media_type="image/jpeg")
+    raise HTTPException(404, "Image not available")
 
 
 @app.patch("/complaints/{cid}", response_model=ComplaintOut)

@@ -33,7 +33,7 @@ DATABASE_URL_UNPOOLED = DATABASE_URL if DATABASE_URL.startswith("sqlite") else (
     _sqlalchemy_url(os.getenv("DATABASE_URL_UNPOOLED", "")) or DATABASE_URL)
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me-please-use-32+chars")
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./uploads")
-MODEL_PATH = os.getenv("MODEL_PATH", "../ml/model.keras")
+MODEL_PATH = os.getenv("MODEL_PATH", str(Path(__file__).resolve().parents[1] / "model" / "model.tflite"))
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.6"))
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}

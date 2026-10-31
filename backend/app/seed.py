@@ -44,9 +44,6 @@ def seed(db):
         buf = io.BytesIO()
         PILImage.new("RGB", (224, 224), COLORS[cat]).save(buf, "JPEG")
         fname = f"seed_{i}.jpg"
-        os.makedirs(UPLOAD_DIR, exist_ok=True)
-        with open(os.path.join(UPLOAD_DIR, fname), "wb") as f:
-            f.write(buf.getvalue())
         conf = round(rnd.uniform(0.45, 0.97), 2)
         level, reasons = compute_priority(db, cat, conf, desc, lat, lng)
         created = now() - timedelta(days=rnd.randint(0, 20), hours=rnd.randint(0, 20))
@@ -55,7 +52,7 @@ def seed(db):
                       category=cat, confidence=conf, needs_review=conf < 0.6, priority=level,
                       priority_reasons=" | ".join(reasons), status=status, created_at=created,
                       updated_at=created + timedelta(hours=rnd.randint(6, 90)))
-        c.images.append(Image(filename=fname))
+        c.images.append(Image(filename=fname, data=buf.getvalue()))
         c.predictions.append(Prediction(category=cat, confidence=conf, model_version="seed-simulated"))
         c.history.append(StatusHistory(status="submitted", comment="Complaint submitted", updated_by=citizen.id,
                                        updated_at=created))
