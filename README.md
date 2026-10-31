@@ -32,6 +32,11 @@ First start seeds 24 simulated complaints.
 ## Neon (current database)
 `neon init` + `neon deploy` created `neon.ts` and `.env.local` (gitignored) with `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED`. The backend loads `.env.local` automatically: pooled URL for requests, unpooled for table creation. `./run.sh` then uses Neon with no other setup. Tests always use a local SQLite file.
 
+## Live deployment
+- Frontend: https://civic-lens-web.onrender.com
+- Backend API: https://civic-lens-api-5k0s.onrender.com (`/health`, `/docs`)
+- Both run on Render's free plan in Singapore with Neon Postgres, and sleep after ~15 min idle (first request takes 30-60 s). Browser tests against the live site: `BASE_URL=https://civic-lens-web.onrender.com node tests/e2e/e2e.mjs`.
+
 ## Deploy (Render backend + Vercel frontend)
 **Backend (Render Web Service):** Language Python, Region Singapore, Root Directory `backend`, Build `pip install -r requirements.txt`, Start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, Free plan. Env vars: `PYTHON_VERSION=3.12.8`, `DATABASE_URL` (Neon pooled), `DATABASE_URL_UNPOOLED` (Neon direct), `SECRET_KEY` (any long random string), `CORS_ORIGINS` (the Vercel URL). The deployed backend runs the 9 MB TFLite model (`backend/model/model.tflite`, no TensorFlow) and keeps uploaded images in the database.
 **Frontend (Vercel):** Root Directory `frontend`, env `NEXT_PUBLIC_API_URL` = the Render backend URL.

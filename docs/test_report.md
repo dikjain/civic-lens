@@ -8,4 +8,4 @@
 | Demo | `node tests/e2e/demo.mjs` records `docs/demo.webm` and `docs/screenshots/` | Done |
 | Not tested | Usability sessions with real users, load/performance, mobile devices, deployed AWS environment | Pending |
 
-Note: the E2E suite assumes seeded demo data and a running app (`./run.sh`). Its "real model" steps use fixtures the model classifies confidently; the model is ~79% accurate overall, so it will sometimes misclassify other photos. The browser suite was last run against the Neon-backed app: 24/24 pass.
+Note: the E2E suite assumes seeded demo data and a running app (`./run.sh`). Its "real model" steps use fixtures the model classifies confidently; the model is ~79% accurate overall, so it will sometimes misclassify other photos. The browser suite was last run against the live Render deployment (frontend + backend + Neon): 24/24 pass.
