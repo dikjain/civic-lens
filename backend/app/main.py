@@ -1,5 +1,6 @@
 import hashlib
 import io
+import json
 import os
 import random
 import uuid
@@ -22,7 +23,7 @@ from .models import now
 from .models import (Assignment, Complaint, Department, Image, Notification, Otp, Prediction, StatusHistory, User)
 from .services import dhash, find_duplicate, notify
 from .priority import compute_priority
-from .schemas import ComplaintOut, ComplaintUpdate, LoginIn, RegisterIn, TokenOut
+from .schemas import ComplaintOut, ComplaintUpdate, FeedbackIn, LoginIn, RegisterIn, TokenOut
 from .security import current_user, hash_password, make_token, require_admin, require_staff, verify_password
 
 app = FastAPI(title="CivicLens AI")
@@ -48,12 +49,20 @@ def dept_map(db: Session) -> dict[int, str]:
 
 
 def _migrate():
-    """Tiny schema upgrade (no Alembic): add images.data if the table predates it, then backfill from disk."""
+    """Schema upgrade (no Alembic): add images.data, rating, feedback, probabilities if absent."""
     from sqlalchemy import inspect, text
     with admin_engine.begin() as conn:
-        cols = {c["name"] for c in inspect(conn).get_columns("images")}
-        if "data" not in cols:
+        cols_im = {c["name"] for c in inspect(conn).get_columns("images")}
+        if "data" not in cols_im:
             conn.execute(text("ALTER TABLE images ADD COLUMN data " + ("BLOB" if admin_engine.dialect.name == "sqlite" else "BYTEA")))
+        
+        cols_c = {c["name"] for c in inspect(conn).get_columns("complaints")}
+        if "rating" not in cols_c:
+            conn.execute(text("ALTER TABLE complaints ADD COLUMN rating INTEGER"))
+        if "feedback" not in cols_c:
+            conn.execute(text("ALTER TABLE complaints ADD COLUMN feedback TEXT"))
+        if "probabilities" not in cols_c:
+            conn.execute(text("ALTER TABLE complaints ADD COLUMN probabilities TEXT"))
     with SessionLocal() as db:
         rows = db.query(Image).filter(Image.data.is_(None)).all()
         n = 0
@@ -66,12 +75,58 @@ def _migrate():
             db.commit()
 
 
+def compute_sla(c: Complaint) -> tuple[int, str, str]:
+    target_hours = 24 if c.priority == "high" else 48 if c.priority == "medium" else 72
+    c_time = c.created_at
+    if c_time.tzinfo is None:
+        c_time = c_time.replace(tzinfo=timezone.utc)
+    curr_time = now()
+    if c.status in ("resolved", "rejected"):
+        u_time = c.updated_at or c_time
+        if u_time.tzinfo is None:
+            u_time = u_time.replace(tzinfo=timezone.utc)
+        elapsed_hours = (u_time - c_time).total_seconds() / 3600
+        if elapsed_hours <= target_hours:
+            return target_hours, "met", f"SLA Met ({round(elapsed_hours, 1)}h / {target_hours}h)"
+        else:
+            overdue_h = round(elapsed_hours - target_hours, 1)
+            return target_hours, "breached", f"SLA Breached (+{overdue_h}h over {target_hours}h target)"
+    else:
+        elapsed_hours = (curr_time - c_time).total_seconds() / 3600
+        remaining_hours = target_hours - elapsed_hours
+        if remaining_hours >= 0:
+            h = int(remaining_hours)
+            m = int((remaining_hours - h) * 60)
+            return target_hours, "on_track", f"{h}h {m}m left (SLA: {target_hours}h)"
+        else:
+            overdue_h = int(-remaining_hours)
+            return target_hours, "overdue", f"SLA Overdue by {overdue_h}h (Escalated)"
+
+
 def to_out(c: Complaint, depts: dict[int, str] | None = None) -> ComplaintOut:
     out = ComplaintOut.model_validate(c)
     out.image_url = f"/complaints/{c.id}/image" if c.images else None
     if c.assignments and c.assignments[-1].department_id:
         did = c.assignments[-1].department_id
         out.department = (depts or dept_map(Session.object_session(c))).get(did)
+    
+    target_h, sla_st, sla_tx = compute_sla(c)
+    out.sla_hours = target_h
+    out.sla_status = sla_st
+    out.sla_text = sla_tx
+
+    if c.probabilities:
+        try:
+            out.probabilities = json.loads(c.probabilities)
+        except Exception:
+            out.probabilities = None
+    if not out.probabilities and c.category:
+        rem = max(0.0, 1.0 - (c.confidence or 0.5))
+        others = [k for k in CATEGORIES if k != c.category]
+        out.probabilities = {c.category: round(c.confidence or 0.5, 4)}
+        for o in others:
+            out.probabilities[o] = round(rem / len(others), 4)
+
     return out
 
 
@@ -129,7 +184,9 @@ async def create_complaint(
     except Exception:
         raise HTTPException(400, "File is not a valid image")
 
-    category, confidence = classifier.classify(data)
+    res = classifier.classify(data)
+    category, confidence = res[0], res[1]
+    probs = res[2] if len(res) > 2 else None
     needs_review = confidence < CONFIDENCE_THRESHOLD
     level, reasons = compute_priority(db, category, confidence, description, lat, lng)
     ph = dhash(pil)
@@ -144,7 +201,8 @@ async def create_complaint(
 
     c = Complaint(ref="TMP", user_id=user.id, title=title[:200], description=description, lat=lat, lng=lng,
                   category=category, confidence=confidence, needs_review=needs_review,
-                  priority=level, priority_reasons=" | ".join(reasons), status="submitted", duplicate_of=dup)
+                  priority=level, priority_reasons=" | ".join(reasons), status="submitted", duplicate_of=dup,
+                  probabilities=json.dumps(probs) if probs else None)
     c.images.append(Image(filename=filename, phash=ph, data=jpeg))
     c.predictions.append(Prediction(category=category, confidence=confidence, model_version=classifier.model_version()))
     add_history(c, "submitted", "Complaint submitted", user.id)
@@ -196,6 +254,40 @@ def get_complaint(ref: str, user: User = Depends(current_user), db: Session = De
         raise HTTPException(404, "Complaint not found")
     if user.role == "citizen" and c.user_id != user.id:
         raise HTTPException(403, "Not your complaint")
+    return to_out(c)
+
+
+@app.post("/complaints/{ref}/feedback", response_model=ComplaintOut)
+def complaint_feedback(ref: str, body: FeedbackIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    c = db.query(Complaint).options(*EAGER).filter(Complaint.ref == ref).first()
+    if not c:
+        raise HTTPException(404, "Complaint not found")
+    if user.role == "citizen" and c.user_id != user.id:
+        raise HTTPException(403, "Not your complaint")
+    
+    if body.reopen:
+        c.status = "in_progress"
+        c.rating = None
+        c.feedback = None
+        note = f"Reopened by citizen: {body.comment or 'Issue not resolved properly'}"
+        add_history(c, "in_progress", note, user.id)
+        notify(db, user.id, f"Complaint {c.ref} has been reopened for physical inspection", f"/track?ref={c.ref}")
+        db.commit()
+        db.refresh(c)
+        return to_out(c)
+        
+    if c.status not in ("resolved", "rejected"):
+        raise HTTPException(400, "Feedback can only be submitted after resolution")
+    if body.rating < 1 or body.rating > 5:
+        raise HTTPException(400, "Rating must be between 1 and 5")
+    
+    c.rating = body.rating
+    c.feedback = body.comment.strip() if body.comment else None
+    comment_text = f"Citizen rating: {body.rating}/5 stars" + (f" - {c.feedback}" if c.feedback else "")
+    add_history(c, c.status, comment_text, user.id)
+    notify(db, user.id, f"Thank you! Your feedback for {c.ref} has been recorded.", f"/track?ref={c.ref}")
+    db.commit()
+    db.refresh(c)
     return to_out(c)
 
 

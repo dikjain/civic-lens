@@ -38,7 +38,7 @@ export default function Review() {
   );
   return (
     <>
-      <Detail c={c} />
+      <Detail c={c} onUpdated={setC} />
       <div className="card">
         <h2>Review &amp; act</h2>
         {c.needs_review && <p className="muted">The AI was not confident. Please confirm or correct the category.</p>}

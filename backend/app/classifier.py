@@ -52,7 +52,7 @@ def model_version() -> str:
     return _name
 
 
-def classify(data: bytes) -> tuple[str, float]:
+def classify(data: bytes) -> tuple[str, float, dict[str, float]]:
     img = Image.open(io.BytesIO(data)).convert("RGB").resize((IMG_SIZE, IMG_SIZE))
     kind, model = _load()
     if kind == "stub":
@@ -67,10 +67,11 @@ def classify(data: bytes) -> tuple[str, float]:
     else:
         probs = model.predict(arr, verbose=0)[0]
     i = int(np.argmax(probs))
-    return CATEGORIES[i], float(probs[i])
+    probs_dict = {CATEGORIES[j]: round(float(probs[j]), 4) for j in range(len(CATEGORIES))}
+    return CATEGORIES[i], float(probs[i]), probs_dict
 
 
-def _heuristic(img: Image.Image) -> tuple[str, float]:
+def _heuristic(img: Image.Image) -> tuple[str, float, dict[str, float]]:
     px = list(img.resize((32, 32)).getdata())
     n = len(px)
     r = sum(p[0] for p in px) / n
@@ -78,9 +79,16 @@ def _heuristic(img: Image.Image) -> tuple[str, float]:
     b = sum(p[2] for p in px) / n
     brightness = (r + g + b) / 3
     if b > r and b > g:
-        return "water_leak", 0.82
-    if g > r and g > b:
-        return "garbage", 0.78
-    if brightness < 110:
-        return "pothole", 0.85
-    return "other", 0.45
+        cat, conf = "water_leak", 0.82
+    elif g > r and g > b:
+        cat, conf = "garbage", 0.78
+    elif brightness < 110:
+        cat, conf = "pothole", 0.85
+    else:
+        cat, conf = "other", 0.45
+    rem = max(0.0, 1.0 - conf)
+    others = [c for c in CATEGORIES if c != cat]
+    probs = {cat: conf}
+    for o in others:
+        probs[o] = round(rem / len(others), 4)
+    return cat, conf, probs

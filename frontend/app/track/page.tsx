@@ -26,7 +26,7 @@ export default function Track() {
         <div className="row"><input placeholder="CL-2026-000001" value={ref} onChange={e => setRef(e.target.value)} style={{ flex: 3 }} /><button>{t("track")}</button></div>
         {err && <div className="err">{err}</div>}
       </form>
-      {c && <Detail c={c} />}
+      {c && <Detail c={c} onUpdated={setC} />}
     </>
   );
 }

@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, Complaint, getSession, STATUS_LABEL, CAT_LABEL } from "@/lib/api";
-import { Cat, Priority, Status } from "@/components/Badges";
+import { Cat, Priority, Status, SlaBadge } from "@/components/Badges";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -35,11 +35,11 @@ export default function Dashboard() {
       </div>
       {err && <div className="err">{err}</div>}
       <table style={{ marginTop: 12 }}>
-        <thead><tr><th>Ref</th><th>Title</th><th>AI category</th><th>Priority</th><th>Status</th><th>Confidence</th></tr></thead>
+        <thead><tr><th>Ref</th><th>Title</th><th>AI category</th><th>Priority</th><th>Status</th><th>SLA / Escalation</th><th>Confidence</th></tr></thead>
         <tbody>{rows.map(c => (
           <tr key={c.id} className="click" onClick={() => router.push(`/dashboard/${c.ref}`)}>
             <td>{c.ref}</td><td>{c.title}</td><td><Cat c={c.category} /></td><td><Priority p={c.priority} /></td>
-            <td><Status s={c.status} /></td><td>{Math.round(c.confidence * 100)}% {c.needs_review && <span className="badge review">review</span>}</td>
+            <td><Status s={c.status} /></td><td><SlaBadge status={c.sla_status} text={c.sla_text} /></td><td>{Math.round(c.confidence * 100)}% {c.needs_review && <span className="badge review">review</span>}</td>
           </tr>
         ))}</tbody>
       </table>

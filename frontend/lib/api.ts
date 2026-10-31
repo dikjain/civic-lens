@@ -5,6 +5,8 @@ export type Complaint = {
   id: number; ref: string; title: string; description: string; lat: number | null; lng: number | null;
   category: string; confidence: number; needs_review: boolean; priority: string; priority_reasons: string;
   status: string; duplicate_of: string | null; created_at: string; image_url: string | null; department: string | null;
+  rating?: number | null; feedback?: string | null; probabilities?: Record<string, number> | null;
+  sla_hours?: number; sla_status?: "on_track" | "overdue" | "met" | "breached"; sla_text?: string;
   history: { status: string; comment: string; updated_at: string }[];
 };
 

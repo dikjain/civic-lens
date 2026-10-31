@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import ForeignKey, String, Text, Float, Boolean, DateTime, LargeBinary
+from sqlalchemy import ForeignKey, String, Text, Float, Boolean, DateTime, LargeBinary, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -64,6 +64,9 @@ class Complaint(Base):
     priority_reasons: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="submitted", index=True)
     duplicate_of: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    probabilities: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
 

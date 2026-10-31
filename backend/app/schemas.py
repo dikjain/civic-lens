@@ -1,6 +1,7 @@
+import json
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class RegisterIn(BaseModel):
@@ -46,7 +47,23 @@ class ComplaintOut(BaseModel):
     duplicate_of: str | None = None
     image_url: str | None = None
     department: str | None = None
+    rating: int | None = None
+    feedback: str | None = None
+    probabilities: dict[str, float] | None = None
+    sla_hours: int = 48
+    sla_status: str = "on_track"
+    sla_text: str = ""
     history: list[HistoryOut] = []
+
+    @field_validator("probabilities", mode="before")
+    @classmethod
+    def parse_probs(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                return None
+        return v
 
 
 class ComplaintUpdate(BaseModel):
@@ -55,3 +72,9 @@ class ComplaintUpdate(BaseModel):
     priority: str | None = None
     department_id: int | None = None
     comment: str = ""
+
+
+class FeedbackIn(BaseModel):
+    rating: int = 5
+    comment: str = ""
+    reopen: bool = False

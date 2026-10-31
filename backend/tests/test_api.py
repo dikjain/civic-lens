@@ -105,3 +105,49 @@ def test_duplicates_notifications_otp():
         assert c.post("/auth/otp/verify", headers=cit, json={"code": "000000" if code != "000000" else "111111"}).status_code == 400
         assert c.post("/auth/otp/verify", headers=cit, json={"code": code}).status_code == 200
         assert c.get("/me", headers=cit).json()["verified"] is True
+
+
+def test_feedback_sla_probabilities():
+    with TestClient(app) as c:
+        cit = login(c, "citizen@demo.com", "citizen123")
+        off = login(c, "officer@demo.com", "officer123")
+
+        # 1. Create complaint and verify SLA and Probabilities
+        r = c.post("/complaints", headers=cit, data={"title": "Pothole school", "description": "urgent accident hazard near school",
+                   "lat": "28.70", "lng": "77.10"}, files={"image": ("p.png", img((50, 50, 55)), "image/png")})
+        assert r.status_code == 200
+        j = r.json()
+        assert j["priority"] == "high"
+        assert j["sla_hours"] == 24
+        assert j["sla_status"] in ("on_track", "overdue")
+        assert len(j["sla_text"]) > 0
+        assert "probabilities" in j and isinstance(j["probabilities"], dict)
+        assert "pothole" in j["probabilities"]
+        assert round(sum(j["probabilities"].values()), 1) == 1.0
+
+        ref = j["ref"]
+        cid = j["id"]
+
+        # 2. Cannot submit feedback before resolved
+        fb_fail = c.post(f"/complaints/{ref}/feedback", headers=cit, json={"rating": 5, "comment": "fixed"})
+        assert fb_fail.status_code == 400
+
+        # 3. Officer resolves it
+        r_res = c.patch(f"/complaints/{cid}", headers=off, json={"status": "resolved", "comment": "road repaved"})
+        assert r_res.status_code == 200 and r_res.json()["status"] == "resolved"
+
+        # 4. Citizen submits rating
+        fb = c.post(f"/complaints/{ref}/feedback", headers=cit, json={"rating": 5, "comment": "Repaired cleanly!"})
+        assert fb.status_code == 200
+        data = fb.json()
+        assert data["rating"] == 5
+        assert data["feedback"] == "Repaired cleanly!"
+        assert any("5/5 stars" in h["comment"] for h in data["history"])
+
+        # 5. Citizen reopens the complaint
+        reopen = c.post(f"/complaints/{ref}/feedback", headers=cit, json={"reopen": True, "comment": "Pothole reopened after rain"})
+        assert reopen.status_code == 200
+        rdata = reopen.json()
+        assert rdata["status"] == "in_progress"
+        assert rdata["rating"] is None
+        assert any("Reopened by citizen" in h["comment"] for h in rdata["history"])
