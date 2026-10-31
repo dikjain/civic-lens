@@ -1,0 +1,37 @@
+// Records docs/demo.webm + screenshots of a full walkthrough. Run with the app running: node tests/e2e/demo.mjs
+import { createRequire } from "module";
+import { execSync } from "child_process";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
+const require = createRequire(path.join(execSync("npm root -g").toString().trim(), "x.js"));
+const { chromium } = require("playwright");
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const DOCS = path.join(HERE, "../../docs");
+const SHOTS = path.join(DOCS, "screenshots"); fs.mkdirSync(SHOTS, { recursive: true });
+const tmp = fs.mkdtempSync("/tmp/demo-");
+const b = await chromium.launch();
+const ctx = await b.newContext({ viewport: { width: 1280, height: 800 }, recordVideo: { dir: tmp, size: { width: 1280, height: 800 } } });
+const p = await ctx.newPage();
+const shot = async n => { await p.waitForTimeout(900); await p.screenshot({ path: path.join(SHOTS, n + ".png") }); await p.waitForTimeout(700); };
+const login = async (e, pw) => { await p.goto("http://localhost:3000/login"); await p.fill("input[type=email]", e); await p.fill("input[type=password]", pw); await p.click("form button"); await p.waitForTimeout(1800); };
+
+await p.goto("http://localhost:3000/"); await shot("01-home");
+await login("citizen@demo.com", "citizen123");
+await p.waitForSelector(".leaflet-container"); await p.setInputFiles("input[type=file]", path.join(HERE, "pothole.jpg"));
+await p.fill('input[placeholder^="e.g."]', "Deep pothole near market"); await p.fill("textarea", "Cars are swerving, risk of accident");
+await p.click(".leaflet-container", { position: { x: 200, y: 120 } }); await shot("02-report");
+await p.click('button:has-text("Submit")'); await p.waitForSelector("text=Complaint submitted"); await shot("03-ai-result");
+await p.click("text=Track this complaint"); await p.waitForSelector("text=Timeline"); await shot("04-tracking");
+await p.click("[aria-label=language]"); await p.waitForTimeout(600); await shot("05-hindi"); await p.click("[aria-label=language]");
+await p.evaluate(() => localStorage.clear());
+await login("officer@demo.com", "officer123"); await p.waitForSelector("tr.click"); await shot("06-officer-queue");
+await p.click("tr.click"); await p.waitForSelector("text=Review & act"); await shot("07-review");
+await p.selectOption("select >> nth=3", { index: 1 }); await p.fill('label:has-text("Comment") + input', "Crew dispatched");
+await p.click('button:has-text("Save changes")'); await p.waitForSelector("text=Saved"); await shot("08-assigned");
+await p.goto("http://localhost:3000/analytics"); await p.waitForSelector(".leaflet-interactive"); await p.waitForTimeout(2500); await shot("09-analytics");
+await p.evaluate(() => localStorage.clear());
+await login("admin@demo.com", "admin123"); await p.goto("http://localhost:3000/admin"); await p.waitForSelector("text=Departments"); await shot("10-admin");
+const v = p.video(); await ctx.close(); await b.close();
+fs.copyFileSync(await v.path(), path.join(DOCS, "demo.webm"));
+console.log("saved docs/demo.webm");
