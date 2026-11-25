@@ -100,6 +100,10 @@ if __name__ == "__main__":
                            "burst pipe flooding road", "leaking tap", "sewage overflow street", "waterlogging street", "water gushing pipe repair"], 300)
     commons("other", ["clean street city", "park bench", "building facade", "shop street", "tree lined road",
                       "bus stop", "street lamp", "market street people", "bridge", "garden", "sidewalk", "playground", "railway station", "school building", "temple", "bicycle street"], 200)
+    # Hard negatives: plain/textured ground that looks dark or rough like a pothole but has no damage.
+    commons("other", ["sand ground texture", "loose gravel surface", "dry mud ground", "bare soil field",
+                      "lawn grass close up", "paving stones pattern", "intact tarmac road", "dirt path ground",
+                      "construction site ground", "desert sand surface", "pebble ground", "smooth concrete floor outdoor"], 260)
     # split 70/15/15
     shutil.rmtree("data", ignore_errors=True)
     for cls in os.listdir(RAW):

@@ -38,7 +38,7 @@ def _load():
                         Interpreter = tf.lite.Interpreter
                     it = Interpreter(model_path=MODEL_PATH)
                     it.allocate_tensors()
-                    _backend, _name = ("tflite", it), "tflite-v1"
+                    _backend, _name = ("tflite", it), "tflite-v2"
                 else:
                     import tensorflow as tf
                     _backend, _name = ("keras", tf.keras.models.load_model(MODEL_PATH)), "keras-v1"

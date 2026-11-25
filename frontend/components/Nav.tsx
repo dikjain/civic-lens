@@ -25,7 +25,7 @@ export default function Nav() {
   return (
     <nav>
       <Link href="/" className="brand" onClick={() => setMobileMenuOpen(false)}>
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true">
           <circle cx="12" cy="12" r="9" />
           <path d="M12 3v6" />
           <path d="M12 15v6" />
@@ -45,7 +45,7 @@ export default function Nav() {
         {mobileMenuOpen ? "✕" : "☰"}
       </button>
 
-      <div className={`nav-links ${mobileMenuOpen ? "open" : ""}`} style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+      <div className={`nav-links ${mobileMenuOpen ? "open" : ""}`}>
         {s && !staff && (
           <>
             <Link href="/report" onClick={() => setMobileMenuOpen(false)}>
@@ -89,14 +89,18 @@ export default function Nav() {
           <span style={{ position: "relative" }}>
             <a
               href="#"
+              className="nav-bell"
               aria-label="notifications"
               onClick={(e) => {
                 e.preventDefault();
                 setOpen(!open);
               }}
-              style={{ display: "inline-flex", alignItems: "center" }}
             >
-              🔔{unread > 0 && <b className="dot">{unread}</b>}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+              </svg>
+              {unread > 0 && <b className="dot">{unread}</b>}
             </a>
             {open && (
               <div className="pop card">
@@ -163,7 +167,7 @@ export default function Nav() {
             </a>
           </div>
         ) : (
-          <Link href="/login">{t("login")}</Link>
+          <Link href="/login" className="nav-login">{t("login")}</Link>
         )}
       </div>
     </nav>
